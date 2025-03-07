@@ -1,0 +1,116 @@
+package main
+
+import (
+	"crypto/ecdsa"
+	"fmt"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/gin-gonic/gin"
+	"math/big"
+
+	"net/http"
+)
+
+type Eth struct {
+	cl ethclient.Client
+}
+
+type txRequest struct {
+	PrivateKey       string `json:"private_key"`
+	RecipientAddress string `json:"recipient_address"`
+	Amount           int64  `json:"amount"`
+}
+
+func New(projectID string) (*Eth, error) {
+	// Подключение к Ethereum через Infura
+	url := fmt.Sprint("https://mainnet.infura.io/v3/", projectID)
+	client, err := ethclient.Dial(url)
+	if err != nil {
+		return nil, err
+	}
+	return &Eth{cl: *client}, nil
+}
+
+func (e *Eth) getBalance(c *gin.Context) {
+	address := c.Param("address")
+	balance, err := e.cl.BalanceAt(c, common.HexToAddress(address), nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"balance": balance.String()})
+}
+
+func (e *Eth) sendTransaction(c *gin.Context) {
+
+	var req txRequest
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	}
+
+	privateKey, err := crypto.HexToECDSA(req.PrivateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid private key"})
+		return
+	}
+
+	// Адрес отправителя
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cast public key to ECDSA"})
+		return
+	}
+	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+
+	// Адрес получателя
+	toAddress := common.HexToAddress(req.RecipientAddress)
+
+	// Получение nonce
+	nonce, err := e.cl.PendingNonceAt(c, fromAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get nonce"})
+		return
+	}
+
+	// Получение рекомендованной комиссии (gas price)
+	gasPrice, err := e.cl.SuggestGasPrice(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gas price"})
+		return
+	}
+
+	// Получение ID сети (chain ID)
+	chainID, err := e.cl.NetworkID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chain ID"})
+		return
+	}
+
+	// Количество ETH для отправки (в wei)
+	amount := big.NewInt(req.Amount)
+
+	// Создание транзакции
+	tx := types.NewTransaction(nonce, toAddress, amount, 21000, gasPrice, nil)
+
+	// Подписание транзакции
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sign transaction"})
+		return
+	}
+
+	// Отправка транзакции
+	if err = e.cl.SendTransaction(c, signedTx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send transaction"})
+		return
+	}
+
+	// Возвращаем хэш транзакции
+	c.JSON(http.StatusOK, gin.H{
+		"transaction_hash": signedTx.Hash().Hex(),
+	})
+}
