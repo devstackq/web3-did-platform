@@ -41,7 +41,7 @@ func createNewDID(c *gin.Context) {
 // createNewDID генерирует DID на основе Ethereum-адреса
 func createDID(c *gin.Context) {
 
-	address := c.Param("address")
+	address := c.Query("address")
 
 	// Формирование DID
 	did := fmt.Sprintf("did:ethr:%s", address)

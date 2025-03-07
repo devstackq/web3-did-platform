@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
+	"math"
 	"math/big"
 
 	"net/http"
@@ -35,12 +36,25 @@ func New(projectID string) (*Eth, error) {
 
 func (e *Eth) getBalance(c *gin.Context) {
 	address := c.Param("address")
+
+	if ok := common.IsHexAddress(address); !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "is not HEX address"})
+		return
+	}
+
 	balance, err := e.cl.BalanceAt(c, common.HexToAddress(address), nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"balance": balance.String()})
+	
+	balanceETH := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(math.Pow10(18)))
+	fmt.Println(balanceETH.String(), "balanceETH")
+
+	c.JSON(http.StatusOK, gin.H{
+		"address": address,
+		"balance": balanceETH.String(),
+	})
 }
 
 func (e *Eth) sendTransaction(c *gin.Context) {

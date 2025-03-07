@@ -11,7 +11,7 @@ func main() {
 
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Welcome to the Web3 DID Platform",
+			"message": "Welcome to the Web3 Platform",
 		})
 	})
 
@@ -25,7 +25,7 @@ func main() {
 	r.GET("/eth/balance/:address", ethCl.getBalance)
 	r.POST("/eth/send", ethCl.sendTransaction)
 
-	if err := r.Run(); err != nil {
+	if err = r.Run(); err != nil {
 		log.Fatal(err)
 	} // 8080
 }
