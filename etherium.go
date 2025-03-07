@@ -47,7 +47,7 @@ func (e *Eth) getBalance(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	balanceETH := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(math.Pow10(18)))
 	fmt.Println(balanceETH.String(), "balanceETH")
 
@@ -113,13 +113,15 @@ func (e *Eth) sendTransaction(c *gin.Context) {
 	// Подписание транзакции
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sign transaction"})
+		errMsg := fmt.Sprintf("Failed to sign transaction: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
 	}
 
 	// Отправка транзакции
 	if err = e.cl.SendTransaction(c, signedTx); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send transaction"})
+		errMsg := fmt.Sprintf("Failed to send transaction: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
 	}
 
