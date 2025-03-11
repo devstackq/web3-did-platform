@@ -1,6 +1,3 @@
-Metamask - storage tokens, safety, send & sign transacation in Blockchain
-through Infura
-
 Infura infastructure - with communicate Blockhain; no need create
 own blockchain node
 
@@ -22,13 +19,6 @@ Solidity code: - Роль: Смарт-контракты, которые вып�
 - send Eth or call some func
 
 
-Example:
-1.Solidity functional - compile and deploy - to Sepolia network( from Remix)
-2.Integrate GO code + Infura;
-2.1 use ABI contract for call methods (in Solidity)
-3.User - connect through Metamask - in own App
-4.Metamask Sign trx -> Go code send -> Blockhain
-
 
 ==================================================================
 go run main.go - run at localhost
@@ -49,3 +39,21 @@ curl -X POST "http://localhost:8080/eth/send" \
 "amount": 5000000000000000
 }'
 
+curl -X GET "http://localhost:8080/eth/history"
+
+success trx hash - 0x9c7cc213ffafa0f5f236d6f48c80d5f5aada0218ac7a36b33f8671189f475204
+
+Links:
+https://sepolia.etherscan.io/tx/0x9c7cc213ffafa0f5f236d6f48c80d5f5aada0218ac7a36b33f8671189f475204
+https://remix.ethereum.org/
+https://developer.metamask.io/
+
+Flow:
+    MetaMask: Пользователь подключает MetaMask к вашему приложению и выбирает аккаунт.
+    Frontend: Приложение отправляет данные (адрес получателя, сумму) на бэкенд.
+    Backend: Бэкенд создает транзакцию, подписывает её приватным ключом и отправляет в сеть через ноду (Infura/Alchemy).
+    Smart Contract: Смарт-контракт на Solidity обрабатывает транзакцию (например, отправляет ETH и сохраняет данные).
+    Ethereum Node: Нода передает транзакцию майнерам для включения в блок.
+    Mining: Майнеры включают транзакцию в блок и подтверждают её.
+    Transaction Hash: Бэкенд возвращает хэш транзакции пользователю.
+    User: Пользователь проверяет статус транзакции на блокчейн-эксплорере с помощью хэша.

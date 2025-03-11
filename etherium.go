@@ -18,7 +18,163 @@ import (
 	"net/http"
 )
 
-const trxABI = `[{"inputs":[{"internalType":"address payable","name":"_receiver","type":"address"}],"name":"sendEth","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[],"name":"getTransactionHistory","outputs":[{"components":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"receiver","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct TransactionManager.Transaction[]","name":"","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"_address","type":"address"}],"name":"getTransactionHistoryByAddress","outputs":[{"components":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"receiver","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct TransactionManager.Transaction[]","name":"","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"sender","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TransactionSent","type":"event"}]`
+const trxABI = `[
+    {
+        "inputs": [
+            {
+                "internalType": "address payable",
+                "name": "_receiver",
+                "type": "address"
+            }
+        ],
+        "name": "sendEth",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getTxHistory",
+        "outputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "address",
+                        "name": "sender",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "receiver",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "amount",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "timestamp",
+                        "type": "uint256"
+                    }
+                ],
+                "internalType": "struct TransactionManager.Transaction[]",
+                "name": "",
+                "type": "tuple[]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_address",
+                "type": "address"
+            }
+        ],
+        "name": "getTransactionHistoryByAddress",
+        "outputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "address",
+                        "name": "sender",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "receiver",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "amount",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "timestamp",
+                        "type": "uint256"
+                    }
+                ],
+                "internalType": "struct TransactionManager.Transaction[]",
+                "name": "",
+                "type": "tuple[]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "sender",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "receiver",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "timestamp",
+                "type": "uint256"
+            }
+        ],
+        "name": "TransactionSent",
+        "type": "event"
+    },
+	{
+		"inputs": [],
+		"name": "getTxHistory",
+		"outputs": [
+			{
+				"components": [
+					{
+						"internalType": "address",
+						"name": "sender",
+						"type": "address"
+					},
+					{
+						"internalType": "address",
+						"name": "receiver",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "amount",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					}
+				],
+				"internalType": "struct TransactionManager.Transaction[]",
+				"name": "",
+				"type": "tuple[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]`
 
 const contractAddress = "0xe37CC42ea6b89BFCe2E6257FdA9dc04d5FE5960b"
 
@@ -101,8 +257,8 @@ func (e *Eth) sendTransaction(c *gin.Context) {
 
 	amount := big.NewInt(req.Amount)
 
-	if err = e.send(c, parsedABI, fromAddress, privateKey, toAddress, amount); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err = e.send(c, parsedABI, fromAddress, toAddress, privateKey, amount); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error send": err.Error()})
 		return
 	}
 
@@ -117,15 +273,8 @@ func (e *Eth) getTransactionHistory(c *gin.Context) {
 		return
 	}
 
-	encodedData, err := parsedABI.Pack("getTransactionHistory")
+	encodedData, err := parsedABI.Pack("getTxHistory")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	var req txRequest
-
-	if err = c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -150,7 +299,7 @@ func (e *Eth) getTransactionHistory(c *gin.Context) {
 		Timestamp *big.Int
 	}
 
-	if err = parsedABI.UnpackIntoInterface(&transactions, "getTransactionHistory", result); err != nil {
+	if err = parsedABI.UnpackIntoInterface(&transactions, "getTxHistory", result); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -164,7 +313,7 @@ func (e *Eth) getTransactionHistory(c *gin.Context) {
 
 }
 
-func (e *Eth) send(ctx context.Context, parsedABI abi.ABI, fromAddress common.Address, privateKey *ecdsa.PrivateKey, toAddress common.Address, amount *big.Int) error {
+func (e *Eth) send(ctx context.Context, parsedABI abi.ABI, fromAddress, toAddress common.Address, privateKey *ecdsa.PrivateKey, amount *big.Int) error {
 
 	// Получение nonce
 	nonce, err := e.cl.PendingNonceAt(ctx, fromAddress)
@@ -178,16 +327,18 @@ func (e *Eth) send(ctx context.Context, parsedABI abi.ABI, fromAddress common.Ad
 		return err
 	}
 
-	gasLimit := uint64(21000) // Стандартный лимит для простой транзакции
+	gasLimit := uint64(300000) // Стандартный лимит для простой транзакции
 	// Количество ETH для отправки (в wei)
 
-	data, err := parsedABI.Pack("sendEth", fromAddress, toAddress, amount)
+	data, err := parsedABI.Pack("sendEth", toAddress)
 	if err != nil {
-		return err
+		return fmt.Errorf("parsedABI.Pack() failed: %v", err)
 	}
 
+	contracAddr := common.HexToAddress(contractAddress)
+
 	// create trx and change state in Blockchain
-	tx := types.NewTransaction(nonce, toAddress, amount, gasLimit, gasPrice, data)
+	tx := types.NewTransaction(nonce, contracAddr, amount, gasLimit, gasPrice, data)
 
 	// Получение ID сети (chain ID)
 	chainID, err := e.cl.NetworkID(ctx)

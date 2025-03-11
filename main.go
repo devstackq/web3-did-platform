@@ -24,7 +24,7 @@ func main() {
 
 	r.GET("/eth/balance/:address", ethCl.getBalance)
 	r.POST("/eth/send", ethCl.sendTransaction)
-	r.POST("/eth/history", ethCl.getTransactionHistory)
+	r.GET("/eth/history", ethCl.getTransactionHistory)
 
 	if err = r.Run(); err != nil {
 		log.Fatal(err)
