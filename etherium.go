@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -10,9 +13,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"math"
 	"math/big"
+	"strings"
 
 	"net/http"
 )
+
+const trxABI = `[{"inputs":[{"internalType":"address payable","name":"_receiver","type":"address"}],"name":"sendEth","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[],"name":"getTransactionHistory","outputs":[{"components":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"receiver","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct TransactionManager.Transaction[]","name":"","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"_address","type":"address"}],"name":"getTransactionHistoryByAddress","outputs":[{"components":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"receiver","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct TransactionManager.Transaction[]","name":"","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"sender","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TransactionSent","type":"event"}]`
+
+const contractAddress = "0xe37CC42ea6b89BFCe2E6257FdA9dc04d5FE5960b"
 
 type Eth struct {
 	cl ethclient.Client
@@ -65,11 +73,12 @@ func (e *Eth) sendTransaction(c *gin.Context) {
 
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	privateKey, err := crypto.HexToECDSA(req.PrivateKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid private key"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -80,60 +89,121 @@ func (e *Eth) sendTransaction(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cast public key to ECDSA"})
 		return
 	}
-	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	// Адрес получателя
+	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 	toAddress := common.HexToAddress(req.RecipientAddress)
 
-	// Получение nonce
-	nonce, err := e.cl.PendingNonceAt(c, fromAddress)
+	parsedABI, err := abi.JSON(strings.NewReader(trxABI))
 	if err != nil {
-		fmt.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get nonce"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	amount := big.NewInt(req.Amount)
+
+	if err = e.send(c, parsedABI, fromAddress, privateKey, toAddress, amount); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+func (e *Eth) getTransactionHistory(c *gin.Context) {
+
+	parsedABI, err := abi.JSON(strings.NewReader(trxABI))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	encodedData, err := parsedABI.Pack("getTransactionHistory")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req txRequest
+
+	if err = c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	address := common.HexToAddress(contractAddress)
+
+	//read only from smart contract
+	result, err := e.cl.CallContract(c, ethereum.CallMsg{
+		To:   &address,
+		Gas:  0,
+		Data: encodedData,
+	}, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var transactions []struct {
+		Sender    common.Address
+		Receiver  common.Address
+		Amount    *big.Int
+		Timestamp *big.Int
+	}
+
+	if err = parsedABI.UnpackIntoInterface(&transactions, "getTransactionHistory", result); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	for _, tx := range transactions {
+		fmt.Printf("Sender: %s, Receiver: %s, Amount: %s, Timestamp: %s\n",
+			tx.Sender.Hex(), tx.Receiver.Hex(), tx.Amount.String(), tx.Timestamp.String())
+	}
+
+	c.Status(http.StatusOK)
+
+}
+
+func (e *Eth) send(ctx context.Context, parsedABI abi.ABI, fromAddress common.Address, privateKey *ecdsa.PrivateKey, toAddress common.Address, amount *big.Int) error {
+
+	// Получение nonce
+	nonce, err := e.cl.PendingNonceAt(ctx, fromAddress)
+	if err != nil {
+		return err
 	}
 
 	// Получение рекомендованной комиссии (gas price)
-	gasPrice, err := e.cl.SuggestGasPrice(c)
+	gasPrice, err := e.cl.SuggestGasPrice(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gas price"})
-		return
+		return err
 	}
 
 	gasLimit := uint64(21000) // Стандартный лимит для простой транзакции
-	//gasPrice := big.NewInt(20000000000) // 20 Gwei
 	// Количество ETH для отправки (в wei)
-	amount := big.NewInt(req.Amount)
 
-	fmt.Println(gasPrice, "gasPrice")
+	data, err := parsedABI.Pack("sendEth", fromAddress, toAddress, amount)
+	if err != nil {
+		return err
+	}
 
-	// Создание транзакции
-	tx := types.NewTransaction(nonce, toAddress, amount, gasLimit, gasPrice, nil)
+	// create trx and change state in Blockchain
+	tx := types.NewTransaction(nonce, toAddress, amount, gasLimit, gasPrice, data)
 
 	// Получение ID сети (chain ID)
-	chainID, err := e.cl.NetworkID(c)
+	chainID, err := e.cl.NetworkID(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chain ID"})
-		return
+		return err
 	}
 	//chainID := big.NewInt(11155111) // Chain ID для Sepolia
-	// Подписание транзакции
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 	if err != nil {
-		errMsg := fmt.Sprintf("Failed to sign transaction: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
-		return
+		return err
 	}
 
-	// Отправка транзакции
-	if err = e.cl.SendTransaction(c, signedTx); err != nil {
-		errMsg := fmt.Sprintf("Failed to send transaction: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
-		return
+	if err = e.cl.SendTransaction(ctx, signedTx); err != nil {
+		return err
 	}
 
-	// Возвращаем хэш транзакции
-	c.JSON(http.StatusOK, gin.H{
-		"transaction_hash": signedTx.Hash().Hex(),
-	})
+	fmt.Printf("Transaction sent: %s\n", signedTx.Hash().Hex())
+	return nil
 }
