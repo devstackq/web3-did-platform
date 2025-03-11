@@ -12,13 +12,13 @@ curl queries:
 /eth/balance/"address" - get balance by address
 /eth/send - send amount - fromAddress - toAddress
 
+curl -X GET "http://localhost:8080/eth/balance/0x000000000000000000000000000000000000dead"
+
 curl -X POST "http://localhost:8080/eth/send" \
 -H "Content-Type: application/json" \
 -d '{
-"private_key": "",
+"private_key": "privateKeyValue",
 "recipient_address": "0x000000000000000000000000000000000000dead",
 "amount": 10000000000000000
 }'
-
-solidity
 

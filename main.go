@@ -29,3 +29,5 @@ func main() {
 		log.Fatal(err)
 	} // 8080
 }
+
+// TODO solidity add

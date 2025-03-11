@@ -26,7 +26,9 @@ type txRequest struct {
 
 func New(projectID string) (*Eth, error) {
 	// Подключение к Ethereum через Infura
-	url := fmt.Sprint("https://mainnet.infura.io/v3/", projectID)
+	//url := fmt.Sprint("https://mainnet.infura.io/v3/", projectID)//eth prod env
+	url := fmt.Sprint("https://sepolia.infura.io/v3/", projectID)
+
 	client, err := ethclient.Dial(url)
 	if err != nil {
 		return nil, err
@@ -86,6 +88,7 @@ func (e *Eth) sendTransaction(c *gin.Context) {
 	// Получение nonce
 	nonce, err := e.cl.PendingNonceAt(c, fromAddress)
 	if err != nil {
+		fmt.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get nonce"})
 		return
 	}
@@ -97,19 +100,23 @@ func (e *Eth) sendTransaction(c *gin.Context) {
 		return
 	}
 
+	gasLimit := uint64(21000) // Стандартный лимит для простой транзакции
+	//gasPrice := big.NewInt(20000000000) // 20 Gwei
+	// Количество ETH для отправки (в wei)
+	amount := big.NewInt(req.Amount)
+
+	fmt.Println(gasPrice, "gasPrice")
+
+	// Создание транзакции
+	tx := types.NewTransaction(nonce, toAddress, amount, gasLimit, gasPrice, nil)
+
 	// Получение ID сети (chain ID)
 	chainID, err := e.cl.NetworkID(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chain ID"})
 		return
 	}
-
-	// Количество ETH для отправки (в wei)
-	amount := big.NewInt(req.Amount)
-
-	// Создание транзакции
-	tx := types.NewTransaction(nonce, toAddress, amount, 21000, gasPrice, nil)
-
+	//chainID := big.NewInt(11155111) // Chain ID для Sepolia
 	// Подписание транзакции
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 	if err != nil {
